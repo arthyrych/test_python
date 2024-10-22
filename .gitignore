@@ -163,3 +163,7 @@ cython_debug/
 
 # Secrets
 secrets.py
+
+# TBD files
+mainTBD.py
+mainBinance.py
