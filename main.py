@@ -1,5 +1,8 @@
 # STATUS: the script opens position and sets take profit and stop loss orders
-# ISSUE: once the position is closed the stop loss order isn't canceled automatically
+# TODO: 
+# 1) set bigger sleep time before time checks
+# 2) re-check the script for issues
+
 import secrets
 import requests
 import time
@@ -7,12 +10,15 @@ from datetime import datetime, timedelta, timezone
 import hmac
 import hashlib
 
+
 # Binance API base URL
 BASE_URL = "https://fapi.binance.com"
+
 
 # Generate a signature for the API request
 def generate_signature(query_string, secret_key):
     return hmac.new(secret_key.encode('utf-8'), query_string.encode('utf-8'), hashlib.sha256).hexdigest()
+
 
 # Send a request to the Binance API
 def send_signed_request(http_method, url_path, payload=None):
@@ -40,13 +46,16 @@ def send_signed_request(http_method, url_path, payload=None):
     
     return response.json()
 
+
 # Global variable to store the time difference (in milliseconds)
 time_offset = 0
+
 
 # Function to fetch server time difference (optional but good practice)
 def get_server_time():
     response = requests.get(BASE_URL + "/fapi/v1/time").json()
     return response['serverTime']
+
 
 # Calculate time difference with Binance server time
 def calculate_time_offset():
@@ -54,25 +63,40 @@ def calculate_time_offset():
     server_time = get_server_time()
     local_time = int(time.time() * 1000)
     time_offset = server_time - local_time
-    print(f"Time offset with Binance server: {time_offset} ms")
+    print(f"- Time offset with Binance server: {time_offset} ms")
+
 
 # Fetch the current time in UTC (timezone-aware)
 def get_current_time():
     return datetime.now(timezone.utc)
 
-# Calculate the next 16:00:20 UTC time
+
+# DEBUG
+# def calculate_next_position_time():
+#     now = get_current_time()
+#     next_position_time = now + timedelta(seconds=30)  # Adjust for faster testing
+#     return next_position_time
+
+# Calculate the next 16:00:05 UTC time
 def calculate_next_position_time():
     now = get_current_time()
-    next_position_time = now + timedelta(seconds=10)  # Adjust for faster testing
+    next_position_time = now.replace(hour=16, minute=0, second=5, microsecond=0)
+
+    if now >= next_position_time:
+        next_position_time += timedelta(days=1)  # Move to next day if current time has passed 16:00:05 today
+    
     return next_position_time
+
 
 # Function to fetch balance from Binance Futures account
 def get_balance():
     return send_signed_request("GET", "/fapi/v2/balance")
 
+
 # Adjust price based on the tick size for BTCUSDT (0.10 for this pair)
 def round_to_tick_size(price, tick_size=0.10):
     return round(price / tick_size) * tick_size
+
 
 # Check the account position mode (One-Way or Hedge Mode)
 def get_position_mode():
@@ -80,6 +104,7 @@ def get_position_mode():
     if response.get('dualSidePosition', None):
         return "HEDGE"
     return "ONE-WAY"
+
 
 # Function to open a position based on the last 4H candle (12:00-16:00 UTC)
 def open_position():
@@ -97,12 +122,12 @@ def open_position():
         else:
             raise Exception(f"Unexpected balance response format: {balance}")
         
-        print(f"Available USDT: {usdt_balance}")
+        print(f"- Available USDT: {usdt_balance}")
 
         # Set leverage
         leverage_payload = {'symbol': symbol, 'leverage': leverage}
         leverage_response = send_signed_request("POST", "/fapi/v1/leverage", leverage_payload)
-        print(f"Leverage set: {leverage_response}")
+        print(f"- Leverage set: {leverage_response}")
 
         # Fetch last 4H candle data
         params = {'symbol': symbol, 'interval': '4h', 'limit': 2}
@@ -119,11 +144,11 @@ def open_position():
         else:
             raise Exception(f"Unexpected OHLCV response format: {ohlcv}")
 
-        print(f"Fetched OHLCV data: {ohlcv}")
+        print(f"- Fetched OHLCV data: {ohlcv}")
 
         # Determine long or short position
         direction = 'short' if close_price > open_price else 'long'
-        print(f"Opening {direction} position")
+        print(f"- Opening {direction} position")
 
         # Stop-loss and take-profit levels
         entry_price = close_price
@@ -134,7 +159,7 @@ def open_position():
         stop_loss = round_to_tick_size(stop_loss)
         take_profit = round_to_tick_size(take_profit)
 
-        print(f"Entry Price: {entry_price}, Stop-Loss: {stop_loss}, Take-Profit: {take_profit}")
+        print(f"- Entry Price: {entry_price}, Stop-Loss: {stop_loss}, Take-Profit: {take_profit}")
 
         # Ensure enough balance to open position
         margin_required = position_size / leverage
@@ -142,7 +167,7 @@ def open_position():
             side = 'BUY' if direction == 'long' else 'SELL'
             quantity = round(position_size / close_price, 3)  # Round quantity to 3 decimals for BTCUSDT
 
-            print(f"Quantity to trade: {quantity} BTC")
+            print(f"- Quantity to trade: {quantity} BTC")
 
             # Get the position mode
             position_mode = get_position_mode()
@@ -160,7 +185,7 @@ def open_position():
                 order_payload['positionSide'] = 'LONG' if direction == 'long' else 'SHORT'
 
             order_response = send_signed_request("POST", "/fapi/v1/order", order_payload)
-            print(f"Position opened: {order_response}")
+            print(f"- Position opened: {order_response}")
 
             # Place a stop-loss and take-profit order separately
             if order_response.get('orderId'):
@@ -179,7 +204,7 @@ def open_position():
                     stop_loss_payload['positionSide'] = 'LONG' if direction == 'long' else 'SHORT'
 
                 stop_loss_response = send_signed_request("POST", "/fapi/v1/order", stop_loss_payload)
-                print(f"Stop-Loss order placed: {stop_loss_response}")
+                print(f"- Stop-Loss order placed: {stop_loss_response}")
 
                 # Place take-profit order (LIMIT)
                 take_profit_payload = {
@@ -196,28 +221,29 @@ def open_position():
                     take_profit_payload['positionSide'] = 'LONG' if direction == 'long' else 'SHORT'
 
                 take_profit_response = send_signed_request("POST", "/fapi/v1/order", take_profit_payload)
-                print(f"Take-Profit order placed: {take_profit_response}")
+                print(f"- Take-Profit order placed: {take_profit_response}")
 
         else:
-            print(f"Insufficient USDT balance to open a {direction} position. Required margin: {margin_required} USDT.")
+            print(f"- Insufficient USDT balance to open a {direction} position. Required margin: {margin_required} USDT.")
     
     except Exception as e:
-        print(f"Error fetching candles or opening position: {e}")
+        print(f"- Error fetching candles or opening position: {e}")
+
 
 # Main script logic
 def main():
     calculate_time_offset()  # Adjust the time offset at the start of the script
     while True:
         next_position_time = calculate_next_position_time()
-        print(f"Next position opening time: {next_position_time}")
+        print(f"\n- Next position opening time: {next_position_time}")
         
         while get_current_time() < next_position_time:
             # Log the waiting status every minute
             if int(get_current_time().strftime("%M")) % 1 == 0:
-                print(f"Waiting for the next position opening at {next_position_time}. Current time: {get_current_time()}")
-            time.sleep(10)  # Amount of seconds before checking again
+                print(f"- Waiting for the next position opening at {next_position_time}. Current time: {get_current_time()}\n")
+            time.sleep(30)  # Amount of seconds before checking again
 
-        print("Opening position...")
+        print("- Opening position...")
         open_position()
 
 if __name__ == "__main__":
