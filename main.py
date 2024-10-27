@@ -1,8 +1,3 @@
-# STATUS: the script opens position and sets take profit and stop loss orders
-# TODO: 
-# 1) set bigger sleep time before time checks
-# 2) re-check the script for issues
-
 import secrets
 import requests
 import time
@@ -80,7 +75,7 @@ def get_current_time():
 # Calculate the next 16:00:05 UTC time
 def calculate_next_position_time():
     now = get_current_time()
-    next_position_time = now.replace(hour=16, minute=0, second=5, microsecond=0)
+    next_position_time = now.replace(hour=16, minute=0, second=2, microsecond=0)
 
     if now >= next_position_time:
         next_position_time += timedelta(days=1)  # Move to next day if current time has passed 16:00:05 today
@@ -238,10 +233,9 @@ def main():
         print(f"\n- Next position opening time: {next_position_time}")
         
         while get_current_time() < next_position_time:
-            # Log the waiting status every minute
-            if int(get_current_time().strftime("%M")) % 1 == 0:
-                print(f"- Waiting for the next position opening at {next_position_time}. Current time: {get_current_time()}\n")
-            time.sleep(30)  # Amount of seconds before checking again
+            if int(get_current_time().strftime("%S")) % 1 == 0: # Frequency about waiting and current time
+                print(f"- Waiting for: {next_position_time}. Current time: {get_current_time()}\n")
+            time.sleep(1)  # Amount of seconds before running again
 
         print("- Opening position...")
         open_position()
