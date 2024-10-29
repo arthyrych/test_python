@@ -4,10 +4,7 @@ import time
 from datetime import datetime, timedelta, timezone
 import hmac
 import hashlib
-
-
-# Binance API base URL
-BASE_URL = "https://fapi.binance.com"
+import config
 
 
 # Generate a signature for the API request
@@ -31,7 +28,7 @@ def send_signed_request(http_method, url_path, payload=None):
         'X-MBX-APIKEY': secrets.API_KEY
     }
 
-    url = BASE_URL + url_path
+    url = config.BASE_URL + url_path
     if http_method == "GET":
         response = requests.get(url, headers=headers, params=payload)
     elif http_method == "POST":
@@ -48,7 +45,7 @@ time_offset = 0
 
 # Function to fetch server time difference
 def get_server_time():
-    response = requests.get(BASE_URL + "/fapi/v1/time").json()
+    response = requests.get(config.BASE_URL + "/fapi/v1/time").json()
     return response['serverTime']
 
 
@@ -103,11 +100,11 @@ def get_position_mode():
 
 # Function to open a position based on the last 4H candle (12:00-16:00 UTC)
 def open_position():
-    symbol = 'BTCUSDT'
-    leverage = 20  # Leverage
-    position_size = 140  # USDT
-    stop_loss_percentage = 0.005  # 0.5%
-    take_profit_percentage = 0.05  # 5%
+    symbol = config.symbol
+    leverage = config.leverage
+    position_size = config.position_size
+    stop_loss_percentage = config.stop_loss_percentage
+    take_profit_percentage = config.take_profit_percentage
 
     try:
         # Fetch balance
@@ -126,7 +123,7 @@ def open_position():
 
         # Fetch last 4H candle data
         params = {'symbol': symbol, 'interval': '4h', 'limit': 2}
-        ohlcv_response = requests.get(BASE_URL + "/fapi/v1/klines", params=params)
+        ohlcv_response = requests.get(config.BASE_URL + "/fapi/v1/klines", params=params)
 
         if ohlcv_response.status_code != 200:
             raise Exception(f"Failed to fetch OHLCV data: {ohlcv_response.text}")
