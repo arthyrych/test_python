@@ -46,7 +46,7 @@ def send_signed_request(http_method, url_path, payload=None):
 time_offset = 0
 
 
-# Function to fetch server time difference (optional but good practice)
+# Function to fetch server time difference
 def get_server_time():
     response = requests.get(BASE_URL + "/fapi/v1/time").json()
     return response['serverTime']
@@ -69,10 +69,10 @@ def get_current_time():
 # DEBUG
 # def calculate_next_position_time():
 #     now = get_current_time()
-#     next_position_time = now + timedelta(seconds=30)  # Adjust for faster testing
+#     next_position_time = now + timedelta(seconds=10)  # Adjust for faster testing
 #     return next_position_time
 
-# Calculate the next 16:00:05 UTC time
+# Calculate the next 16:00:02 UTC time
 def calculate_next_position_time():
     now = get_current_time()
     next_position_time = now.replace(hour=16, minute=0, second=2, microsecond=0)
@@ -145,7 +145,7 @@ def open_position():
         direction = 'short' if close_price > open_price else 'long'
         print(f"- Opening {direction} position")
 
-        # Stop-loss and take-profit levels
+        # SL and TP levels
         entry_price = close_price
         stop_loss = entry_price * (1 - stop_loss_percentage) if direction == 'long' else entry_price * (1 + stop_loss_percentage)
         take_profit = entry_price * (1 + take_profit_percentage) if direction == 'long' else entry_price * (1 - take_profit_percentage)
@@ -167,12 +167,14 @@ def open_position():
             # Get the position mode
             position_mode = get_position_mode()
 
-            # Place market order
+            # Place an entry order (LIMIT)
             order_payload = {
                 'symbol': symbol,
                 'side': side,
-                'type': 'MARKET',
-                'quantity': quantity
+                'type': 'LIMIT',
+                'price': str(entry_price),
+                'quantity': quantity,
+                'timeInForce': 'GTC', # Good til canceled
             }
 
             # Only specify positionSide if in HEDGE mode
@@ -182,16 +184,17 @@ def open_position():
             order_response = send_signed_request("POST", "/fapi/v1/order", order_payload)
             print(f"- Position opened: {order_response}")
 
-            # Place a stop-loss and take-profit order separately
+            # Place SL and TP orders separately
             if order_response.get('orderId'):
-                # Place stop-loss order (STOP_MARKET)
+                # Place SL order (STOP LIMIT)
                 stop_loss_payload = {
                     'symbol': symbol,
                     'side': 'SELL' if direction == 'long' else 'BUY',
                     'quantity': quantity,
-                    'type': 'STOP_MARKET',
-                    'stopPrice': str(stop_loss),
-                    'timeInForce': 'GTC'
+                    'type': 'STOP',
+                    'stopPrice': str(stop_loss),  # Trigger price
+                    'price': str(stop_loss),  # Limit price
+                    'timeInForce': 'GTC',
                 }
 
                 # Only specify positionSide if in HEDGE mode
@@ -201,13 +204,13 @@ def open_position():
                 stop_loss_response = send_signed_request("POST", "/fapi/v1/order", stop_loss_payload)
                 print(f"- Stop-Loss order placed: {stop_loss_response}")
 
-                # Place take-profit order (LIMIT)
+                # TP order (LIMIT)
                 take_profit_payload = {
                     'symbol': symbol,
                     'side': 'SELL' if direction == 'long' else 'BUY',
-                    'quantity': quantity,
                     'type': 'LIMIT',
                     'price': str(take_profit),
+                    'quantity': quantity,
                     'timeInForce': 'GTC',
                 }
 
@@ -233,7 +236,7 @@ def main():
         print(f"\n- Next position opening time: {next_position_time}")
         
         while get_current_time() < next_position_time:
-            if int(get_current_time().strftime("%S")) % 1 == 0: # Frequency about waiting and current time
+            if int(get_current_time().strftime("%S")) % 1 == 0: # Log frequency for waiting and current time
                 print(f"- Waiting for: {next_position_time}. Current time: {get_current_time()}\n")
             time.sleep(1)  # Amount of seconds before running again
 
