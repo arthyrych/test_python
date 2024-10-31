@@ -75,7 +75,7 @@ def calculate_next_position_time():
     next_position_time = now.replace(hour=16, minute=0, second=2, microsecond=0)
 
     if now >= next_position_time:
-        next_position_time += timedelta(days=1)  # Move to next day if current time has passed 16:00:05 today
+        next_position_time += timedelta(days=1)  # Move to next day if current time has passed today
     
     return next_position_time
 
@@ -164,25 +164,25 @@ def open_position():
             # Get the position mode
             position_mode = get_position_mode()
 
-            # Place an entry order (LIMIT)
+            # Place an entry order (MARKET)
             order_payload = {
                 'symbol': symbol,
                 'side': side,
-                'type': 'LIMIT',
-                'price': str(entry_price),
+                'type': 'MARKET', # Limit or Market
                 'quantity': quantity,
-                'timeInForce': 'GTC', # Good til canceled
+                # 'price': str(entry_price),
+                # 'timeInForce': 'GTC', # Good til canceled
             }
 
             # Only specify positionSide if in HEDGE mode
             if position_mode == "HEDGE":
                 order_payload['positionSide'] = 'LONG' if direction == 'long' else 'SHORT'
 
-            order_response = send_signed_request("POST", "/fapi/v1/order", order_payload)
-            print(f"- Position opened: {order_response}")
+            entry_order_response = send_signed_request("POST", "/fapi/v1/order", order_payload)
+            print(f"- Position opened: {entry_order_response}")
 
             # Place SL and TP orders separately
-            if order_response.get('orderId'):
+            if entry_order_response.get('orderId'):
                 # Place SL order (STOP LIMIT)
                 stop_loss_payload = {
                     'symbol': symbol,
