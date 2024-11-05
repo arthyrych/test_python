@@ -20,7 +20,7 @@ def send_signed_request(http_method, url_path, payload=None):
     global time_offset
     # Add timestamp, recvWindow, and signature
     payload['timestamp'] = int(time.time() * 1000) + time_offset
-    payload['recvWindow'] = 10000  # Increase recvWindow to 10 seconds for buffer
+    payload['recvWindow'] = config.recvWindow
     query_string = '&'.join([f"{key}={value}" for key, value in payload.items()])
     signature = generate_signature(query_string, secrets.SECRET_KEY)
     payload['signature'] = signature
@@ -36,10 +36,6 @@ def send_signed_request(http_method, url_path, payload=None):
         response = requests.delete(url, headers=headers, params=payload)
     
     return response.json()
-
-
-# Global variable to store the time difference (in milliseconds)
-time_offset = 0
 
 
 # Function to fetch server time difference
@@ -143,8 +139,8 @@ def open_position():
         take_profit = entry_price * (1 + take_profit_percentage) if direction == 'long' else entry_price * (1 - take_profit_percentage)
 
         # Adjust stop-loss and take-profit prices to meet tick size requirements
-        stop_loss = round(stop_loss, 1)
-        take_profit = round(take_profit, 1)
+        stop_loss = round(stop_loss, config.round_tick_size)
+        take_profit = round(take_profit, config.round_tick_size)
 
         print(f"- Entry Price: {entry_price}, Stop-Loss: {stop_loss}, Take-Profit: {take_profit}")
 
@@ -229,7 +225,7 @@ def main():
         print(f"- Next position opening time: {next_position_time}")
         
         while get_current_time() < next_position_time:
-            if int(get_current_time().strftime("%S")) % 1 == 0: # Log frequency for waiting and current time
+            if int(get_current_time().strftime("%S")) % 60 == 0: # Log frequency for waiting and current time
                 print(f"- Waiting for: {next_position_time}. Current time: {get_current_time()}\n")
             time.sleep(1)  # Amount of seconds before running again
 
