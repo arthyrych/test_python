@@ -18,15 +18,14 @@ def send_signed_request(http_method, url_path, payload=None):
         payload = {}
 
     global time_offset
-    # Add timestamp and signature
+    # Add timestamp, recvWindow, and signature
     payload['timestamp'] = int(time.time() * 1000) + time_offset
+    payload['recvWindow'] = 10000  # Increase recvWindow to 10 seconds for buffer
     query_string = '&'.join([f"{key}={value}" for key, value in payload.items()])
     signature = generate_signature(query_string, secrets.SECRET_KEY)
     payload['signature'] = signature
 
-    headers = {
-        'X-MBX-APIKEY': secrets.API_KEY
-    }
+    headers = {'X-MBX-APIKEY': secrets.API_KEY}
 
     url = config.BASE_URL + url_path
     if http_method == "GET":
@@ -55,7 +54,7 @@ def calculate_time_offset():
     server_time = get_server_time()
     local_time = int(time.time() * 1000)
     time_offset = server_time - local_time
-    print(f"- Time offset with Binance server: {time_offset} ms")
+    print(f"\n- Time offset with Binance server: {time_offset} ms")
 
 
 # Fetch the current time in UTC (timezone-aware)
@@ -85,11 +84,6 @@ def get_balance():
     return send_signed_request("GET", "/fapi/v2/balance")
 
 
-# Adjust price based on the tick size for BTCUSDT (0.10 for this pair)
-def round_to_tick_size(price, tick_size=0.10):
-    return round(price / tick_size) * tick_size
-
-
 # Check the account position mode (One-Way or Hedge Mode)
 def get_position_mode():
     response = send_signed_request("GET", "/fapi/v1/positionSide/dual")
@@ -109,6 +103,7 @@ def open_position():
     try:
         # Fetch balance
         balance = get_balance()
+
         if isinstance(balance, list):
             usdt_balance = float(next(b['availableBalance'] for b in balance if b['asset'] == 'USDT'))
         else:
@@ -147,9 +142,9 @@ def open_position():
         stop_loss = entry_price * (1 - stop_loss_percentage) if direction == 'long' else entry_price * (1 + stop_loss_percentage)
         take_profit = entry_price * (1 + take_profit_percentage) if direction == 'long' else entry_price * (1 - take_profit_percentage)
 
-        # Adjust prices to meet tick size requirements
-        stop_loss = round_to_tick_size(stop_loss)
-        take_profit = round_to_tick_size(take_profit)
+        # Adjust stop-loss and take-profit prices to meet tick size requirements
+        stop_loss = round(stop_loss, 1)
+        take_profit = round(take_profit, 1)
 
         print(f"- Entry Price: {entry_price}, Stop-Loss: {stop_loss}, Take-Profit: {take_profit}")
 
@@ -183,6 +178,7 @@ def open_position():
 
             # Place SL and TP orders separately
             if entry_order_response.get('orderId'):
+
                 # Place SL order (STOP LIMIT)
                 stop_loss_payload = {
                     'symbol': symbol,
@@ -201,7 +197,7 @@ def open_position():
                 stop_loss_response = send_signed_request("POST", "/fapi/v1/order", stop_loss_payload)
                 print(f"- Stop-Loss order placed: {stop_loss_response}")
 
-                # TP order (LIMIT)
+                # Place TP order (LIMIT)
                 take_profit_payload = {
                     'symbol': symbol,
                     'side': 'SELL' if direction == 'long' else 'BUY',
@@ -227,10 +223,10 @@ def open_position():
 
 # Main script logic
 def main():
-    calculate_time_offset()  # Adjust the time offset at the start of the script
     while True:
+        calculate_time_offset()  # Adjust time offset before each trade cycle
         next_position_time = calculate_next_position_time()
-        print(f"\n- Next position opening time: {next_position_time}")
+        print(f"- Next position opening time: {next_position_time}")
         
         while get_current_time() < next_position_time:
             if int(get_current_time().strftime("%S")) % 1 == 0: # Log frequency for waiting and current time
