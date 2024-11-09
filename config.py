@@ -1,8 +1,10 @@
 # Config variables
 BASE_URL = "https://fapi.binance.com" # Futures
 
-# General
+# Requests
 recvWindow = 10000 # Increase recvWindow for buffer
+retries = 3 # Amount of request retries
+delay = 2 # Amount of seconds between request retries
 
 # Trading
 symbol = 'BTCUSDT'

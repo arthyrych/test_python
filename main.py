@@ -13,29 +13,48 @@ def generate_signature(query_string, secret_key):
 
 
 # Send a request to the Binance API
-def send_signed_request(http_method, url_path, payload=None):
+def send_signed_request(http_method, url_path, payload=None, retries=config.retries, delay=config.delay):
     if payload is None:
         payload = {}
 
+    # Set timestamp for the API request
     global time_offset
-    # Add timestamp, recvWindow, and signature
     payload['timestamp'] = int(time.time() * 1000) + time_offset
     payload['recvWindow'] = config.recvWindow
+
+    # Generate query string and signature
     query_string = '&'.join([f"{key}={value}" for key, value in payload.items()])
     signature = generate_signature(query_string, secrets.SECRET_KEY)
     payload['signature'] = signature
 
+    # Add API key to headers
     headers = {'X-MBX-APIKEY': secrets.API_KEY}
-
     url = config.BASE_URL + url_path
-    if http_method == "GET":
-        response = requests.get(url, headers=headers, params=payload)
-    elif http_method == "POST":
-        response = requests.post(url, headers=headers, params=payload)
-    elif http_method == "DELETE":
-        response = requests.delete(url, headers=headers, params=payload)
-    
-    return response.json()
+
+    # Try to send the request up to 'retries' times
+    for attempt in range(retries):
+        try:
+            # Send the request depending on the HTTP method
+            if http_method == "GET":
+                response = requests.get(url, headers=headers, params=payload)
+            elif http_method == "POST":
+                response = requests.post(url, headers=headers, params=payload)
+            elif http_method == "DELETE":
+                response = requests.delete(url, headers=headers, params=payload)
+            
+            # Check if the response is successful (200-299 status)
+            response.raise_for_status()  # Raise an error for HTTP codes 4xx or 5xx
+            return response.json() # Return the JSON response if successful
+
+        except requests.exceptions.RequestException as e:
+            # Print error and retry after a delay if failed
+            print(f"Attempt {attempt + 1} failed: {e}")
+            if attempt < retries - 1:
+                time.sleep(delay)  # Wait before retrying
+            else:
+                # Return an error message after max retries are reached
+                print("Max retries reached. Exiting.")
+                return {"error": str(e)}
 
 
 # Function to fetch server time difference
@@ -225,6 +244,7 @@ def main():
         print(f"- Next position opening time: {next_position_time}")
         
         while get_current_time() < next_position_time:
+            # if int(get_current_time().strftime("%S")) % 1 == 0: # DEBUG
             if int(get_current_time().strftime("%S")) % 60 == 0: # Log frequency for waiting and current time
                 print(f"- Waiting for: {next_position_time}. Current time: {get_current_time()}\n")
             time.sleep(1)  # Amount of seconds before running again
