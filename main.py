@@ -83,10 +83,10 @@ def get_current_time():
 #     next_position_time = now + timedelta(seconds=10)  # Adjust for faster testing
 #     return next_position_time
 
-# Calculate the next 16:00:02 UTC time
+# Calculate the next 16:00:03 UTC time
 def calculate_next_position_time():
     now = get_current_time()
-    next_position_time = now.replace(hour=16, minute=0, second=2, microsecond=0)
+    next_position_time = now.replace(hour=16, minute=0, second=3, microsecond=0)
 
     if now >= next_position_time:
         next_position_time += timedelta(days=1)  # Move to next day if current time has passed today
@@ -132,7 +132,7 @@ def open_position():
         print(f"- Leverage set: {leverage_response}")
 
         # Fetch last 4H candle data
-        params = {'symbol': symbol, 'interval': '4h', 'limit': 2}
+        params = {'symbol': symbol, 'interval': '4h', 'limit': 1}
         ohlcv_response = requests.get(config.BASE_URL + "/fapi/v1/klines", params=params)
 
         if ohlcv_response.status_code != 200:
@@ -140,8 +140,17 @@ def open_position():
 
         ohlcv = ohlcv_response.json()
 
-        if isinstance(ohlcv, list) and len(ohlcv) >= 2:
-            last_candle = ohlcv[-2]
+        if isinstance(ohlcv, list) and len(ohlcv) >= 1:
+            last_candle = ohlcv[-1]
+            candle_time = int(last_candle[0]) # Start time of the fetched candle in milliseconds
+
+            # Calculate the expected start time for the 12:00-16:00 candle
+            current_time = get_current_time()
+            expected_start_time = current_time.replace(hour=12, minute=0, second=0, microsecond=0).timestamp() * 1000
+
+            if candle_time != expected_start_time:
+                raise Exception(f"Fetched candle does not match the 12:00-16:00 interval. Start time: {candle_time}, Expected: {expected_start_time}")
+
             open_price, close_price = float(last_candle[1]), float(last_candle[4])
         else:
             raise Exception(f"Unexpected OHLCV response format: {ohlcv}")
