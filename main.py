@@ -94,6 +94,19 @@ def calculate_next_position_time():
     return next_position_time
 
 
+# Helper for getting today's 12:00-16:00 candle
+def calculate_candle_timestamps():
+    now = get_current_time()
+    start_time = now.replace(hour=12, minute=0, second=0, microsecond=0)
+    end_time = now.replace(hour=16, minute=0, second=0, microsecond=0)
+
+    # Check if the current time is past 16:00
+    if now >= end_time:
+        return int(start_time.timestamp() * 1000), int(end_time.timestamp() * 1000)
+    else:
+        raise Exception("The 12:00-16:00 candle for today is not available yet.")
+
+
 # Function to fetch balance from Binance Futures account
 def get_balance():
     return send_signed_request("GET", "/fapi/v2/balance")
@@ -131,8 +144,16 @@ def open_position():
         leverage_response = send_signed_request("POST", "/fapi/v1/leverage", leverage_payload)
         print(f"- Leverage set: {leverage_response}")
 
-        # Fetch last 4H candle data
-        params = {'symbol': symbol, 'interval': '4h', 'limit': 1}
+        # Fetch the exact 12:00-16:00 candle
+        start_time, end_time = calculate_candle_timestamps()
+        params = {
+            'symbol': symbol,
+            'interval': '4h',
+            'startTime': start_time,
+            'endTime': end_time,
+            'limit': 1
+        }
+
         ohlcv_response = requests.get(config.BASE_URL + "/fapi/v1/klines", params=params)
 
         if ohlcv_response.status_code != 200:
@@ -140,16 +161,13 @@ def open_position():
 
         ohlcv = ohlcv_response.json()
 
-        if isinstance(ohlcv, list) and len(ohlcv) >= 1:
-            last_candle = ohlcv[-1]
+        if isinstance(ohlcv, list) and len(ohlcv) == 1:
+            last_candle = ohlcv[0]
             candle_time = int(last_candle[0]) # Start time of the fetched candle in milliseconds
 
-            # Calculate the expected start time for the 12:00-16:00 candle
-            current_time = get_current_time()
-            expected_start_time = current_time.replace(hour=12, minute=0, second=0, microsecond=0).timestamp() * 1000
-
-            if candle_time != expected_start_time:
-                raise Exception(f"Fetched candle does not match the 12:00-16:00 interval. Start time: {candle_time}, Expected: {expected_start_time}")
+            # Validate the candle start time
+            if candle_time != start_time:
+                raise Exception(f"Fetched candle does not match the 12:00-16:00 interval. Start time: {candle_time}, Expected: {start_time}")
 
             open_price, close_price = float(last_candle[1]), float(last_candle[4])
         else:
@@ -189,8 +207,8 @@ def open_position():
                 'side': side,
                 'type': 'MARKET', # Limit or Market
                 'quantity': quantity,
-                # 'price': str(entry_price),
-                # 'timeInForce': 'GTC', # Good til canceled
+                # 'price': str(entry_price), # Limit orders only
+                # 'timeInForce': 'GTC', # Good til canceled, Limit orders only
             }
 
             # Only specify positionSide if in HEDGE mode
