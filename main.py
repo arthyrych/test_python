@@ -78,10 +78,10 @@ def get_current_time():
 
 
 # DEBUG
-# def calculate_next_position_time():
-#     now = get_current_time()
-#     next_position_time = now + timedelta(seconds=10)  # Adjust for faster testing
-#     return next_position_time
+def calculate_next_position_time_debug():
+    now = get_current_time()
+    next_position_time = now + timedelta(seconds=10)  # Adjust for faster testing
+    return next_position_time
 
 # Calculate the next 16:00:03 UTC time
 def calculate_next_position_time():
