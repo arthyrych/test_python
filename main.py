@@ -194,7 +194,13 @@ def open_position():
         margin_required = position_size / leverage
         if usdt_balance >= margin_required:
             side = 'BUY' if direction == 'long' else 'SELL'
-            quantity = round(position_size / close_price, 3)  # Round quantity to 3 decimals for BTCUSDT
+
+            # Calculate quantity based on position size (USDT) and close price, round quantity to 3 decimals
+            quantity = round(position_size / close_price, 3)
+
+            # Ensure the quantity is at least the minimum required
+            if quantity < config.min_quantity:
+                quantity = config.min_quantity
 
             print(f"- Quantity to trade: {quantity} BTC")
 
